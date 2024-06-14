@@ -1,0 +1,131 @@
+if !target TargetName jpeg else TargetName %target
+
+Assembly $TargetName
+Type     lib
+Version! 3.0.4
+
+if _platform == windows Compiler cl else Compiler clang
+
+BuildDirectory            bin/$assembly
+IntermediateDirectory     int/$assembly
+
+ExlcudedSourceDirectories *
+
+Jpeg16_Sources [
+    jcapistd.c jccolor.c jcdiffct.c jclossls.c jcmainct.c
+    jcprepct.c jcsample.c jdapistd.c jdcolor.c jddiffct.c
+    jdlossls.c jdmainct.c jdpostct.c jdsample.c jutils.c
+]
+
+Jpeg12_Sources [
+    $Jpeg16_Sources jccoefct.c jcdctmgr.c jdcoefct.c
+    jddctmgr.c jdmerge.c jfdctfst.c jfdctint.c jidctflt.c
+    jidctfst.c jidctint.c jidctred.c jquant1.c jquant2.c
+]
+
+Jpeg_Sources [
+    $Jpeg12_Sources jcapimin.c jchuff.c jcicc.c jcinit.c
+    jclhuff.c jcmarker.c jcmaster.c jcomapi.c jcparam.c jcphuff.c jctrans.c
+    jdapimin.c jdatadst.c jdatasrc.c jdhuff.c jdicc.c jdinput.c jdlhuff.c
+    jdmarker.c jdmaster.c jdphuff.c jdtrans.c jerror.c jfdctflt.c jmemmgr.c
+    jmemnobs.c jpeg_nbits.c
+]
+
+TurboJpeg_Sources [
+    $Jpeg_Sources turbojpeg.c transupp.c jdatadst-tj.c jdatasrc-tj.c rdbmp.c rdppm.c
+    wrbmp.c wrppm.c 
+]
+
+TurboJpeg12_Sources [
+    $Jpeg12_Sources rdppm.c wrppm.c
+]
+
+TurboJpeg16_Sources [
+    $Jpeg16_Sources rdppm.c wrppm.c
+]
+
+bits_jsample              %bits_in_jsample
+if !bits_in_jsample       bits_jsample` 8
+
+if !target == jpeg         IncludedSourceFiles $Jpeg_Sources
+if  target == jpeg         IncludedSourceFiles $Jpeg_Sources
+if  target == jpeg12       IncludedSourceFiles $Jpeg12_Sources      ; bits_jsample` 12
+if  target == jpeg16       IncludedSourceFiles $Jpeg16_Sources      ; bits_jsample` 16
+if  target == turbojpeg    IncludedSourceFiles $TurboJpeg_Sources
+if  target == turbojpeg12  IncludedSourceFiles $TurboJpeg12_Sources ; bits_jsample` 12
+if  target == turbojpeg16  IncludedSourceFiles $TurboJpeg16_Sources ; bits_jsample` 16
+
+"Emulating libjpeg API/ABI v% (WITH_JPEG7 = %, WITH_JPEG8 = %)" $jpeg_version %jpeg7 %jpeg8
+
+jpeg_version              62
+jpeg_version_decimal      6.2
+if jpeg8                  jpeg_version` 80 ; jpeg_version_decimal` 8.0
+if jpeg7                  jpeg_version` 70 ; jpeg_version_decimal` 7.0
+
+CompilerFlags             -O3
+
+Includes                  . gen
+Defines                   JPEG_LIB_VERSION=$jpeg_version PACKAGE_NAME=\"libjpeg-turbo\" BUILD=\"%(_timestamp)\" VERSION=\"$(Version)\"
+Defines                   NDEBUG INLINE=inline BITS_IN_JSAMPLE=$(bits_jsample)
+
+if bits_jsample == 8      Defines WITH_SIMD=%!no_simd C_ARITH_CODING_SUPPORTED=%!no_arith_encode D_ARITH_CODING_SUPPORTED=%!no_arith_decode
+
+if _bit == 32             Defines SIZEOF_SIZE_T=4
+if _bit == 64             Defines SIZEOF_SIZE_T=8
+
+if compiler != cl         Defines "HIDDEN=__attribute__((visibility(\"hidden\")))"
+
+if compiler == cl         Defines FORCE_INLINE=__forceinline THREAD_LOCAL=__declspec(thread) HAVE_INTRIN_H=1 
+if compiler != cl         Defines "FORCE_INLINE=__attribute__((always_inline))" THREAD_LOCAL=__thread
+
+if jpeg_version == 62     Defines JPEG_LIB_VERSION_DECIMAL=6.2 DEFAULT_SO_MAJOR_VERSION=$jpeg_version DEFAULT_SO_MINOR_VERSION=0
+if jpeg_version == 80     Defines JPEG_LIB_VERSION_DECIMAL=8.0 DEFAULT_SO_MAJOR_VERSION=8 DEFAULT_SO_MINOR_VERSION=2
+if jpeg_version == 70     Defines JPEG_LIB_VERSION_DECIMAL=7.0 2DEFAULT_SO_MAJOR_VERSION=7 DEFAULT_SO_MINOR_VERSION=0
+
+if target == turbojpeg|turbojpeg12|turbojpeg16 Defines BMP_SUPPORTED PPM_SUPPORTED
+
+#if target starts_with turbojpeg Defines BMP_SUPPORTED PPM_SUPPORTED
+
+
+#PreBuild.NewDir           gen
+#PreBuild.Copy!            jconfig.txt         gen/jconfig.h
+#PreBuild.Copy!            jconfigint.h.in.new gen/jconfigint.h
+#PreBuild.Copy!            jversion.h.in       gen/jversion.h
+
+if _platform != windows   PreBuild.Cmd mkdir -p gen
+if _platform == windows   PreBuild.Cmd mkdir gen
+
+if _platform != windows   PreBuild.Cmd cp   jconfig.txt         gen/jconfig.h
+if _platform != windows   PreBuild.Cmd cp   jversion.h.in       gen/jversion.h
+if _platform != windows   PreBuild.Cmd cp   jconfigint.h.in.new gen/jconfigint.h
+if _platform == windows   PreBuild.Cmd copy jconfig.txt         gen\jconfig.h
+if _platform == windows   PreBuild.Cmd copy jversion.h.in       gen\jversion.h
+if _platform == windows   PreBuild.Cmd copy jconfigint.h.in.new gen\jconfigint.h
+
+##
+help.message {
+
+ OPTIONS
+   - jpeg8
+     Emulate libjpeg v8 API/ABI (this makes ${CMAKE_PROJECT_NAME} backward-incompatible with libjpeg v6b)
+     
+   - jpeg7
+     Emulate libjpeg v7 API/ABI (this makes ${CMAKE_PROJECT_NAME} backward-incompatible with libjpeg v6b)
+
+   - bits_in_jsample=VALUE (Default value is 8)
+      Specify "bits_in_jsample" as either
+         8   for 8-bit sample values (the usual setting)
+         12  for 12-bit sample values
+      Only 8 and 12 are legal data precisions for lossy JPEG according to the
+      JPEG standard, and the IJG code does not support anything else!
+
+   - no_simd
+      Disable SIMD acceleration
+
+   - no_arith_encode
+      Disable arithmetic encoding 
+
+   - no_arith_decode
+      Disable arithmetic decoding 
+}
+##

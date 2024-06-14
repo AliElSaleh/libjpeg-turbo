@@ -1,0 +1,8 @@
+# build all the different permutations of libjpeg
+
+libjpeg.build target=jpeg
+libjpeg.build target=jpeg12
+libjpeg.build target=jpeg16
+libjpeg.build target=turbojpeg
+libjpeg.build target=turbojpeg12
+libjpeg.build target=turbojpeg16
