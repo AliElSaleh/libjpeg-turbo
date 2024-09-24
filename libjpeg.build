@@ -1,10 +1,17 @@
 if !target TargetName jpeg else TargetName %target
 
 Assembly $TargetName
-Type     lib
-Version! 3.0.4
+Type     static_lib
 
-if _platform == windows Compiler cl else Compiler clang
+TitleName    libjpeg-turbo
+Description  libjpeg API DLL
+InternalName jpeg$(jpeg_version)
+Version      3.0.4
+CompanyName  libjpeg-turbo
+Copyright    Copyright 1991-%_date.year The libjpeg-turbo Project and many others
+
+if windows Compiler cl else Compiler clang
+Assembler nasm
 
 BuildDirectory            bin/$assembly
 IntermediateDirectory     int/$assembly
@@ -21,6 +28,7 @@ Jpeg12_Sources [
     $Jpeg16_Sources jccoefct.c jcdctmgr.c jdcoefct.c
     jddctmgr.c jdmerge.c jfdctfst.c jfdctint.c jidctflt.c
     jidctfst.c jidctint.c jidctred.c jquant1.c jquant2.c
+    jcarith.c jaricom.c jdarith.c
 ]
 
 Jpeg_Sources [
@@ -48,11 +56,43 @@ bits_jsample 8
 
 if !target                 IncludedSourceFiles $Jpeg_Sources
 if  target == jpeg         IncludedSourceFiles $Jpeg_Sources
-if  target == jpeg12       IncludedSourceFiles $Jpeg12_Sources      ; bits_jsample` 12
+if  target == jpeg12       IncludedSourceFiles $Jpeg12_Sources      ; bits_jsample` 8
 if  target == jpeg16       IncludedSourceFiles $Jpeg16_Sources      ; bits_jsample` 16
 if  target == turbojpeg    IncludedSourceFiles $TurboJpeg_Sources
-if  target == turbojpeg12  IncludedSourceFiles $TurboJpeg12_Sources ; bits_jsample` 12
+if  target == turbojpeg12  IncludedSourceFiles $TurboJpeg12_Sources ; bits_jsample` 8
 if  target == turbojpeg16  IncludedSourceFiles $TurboJpeg16_Sources ; bits_jsample` 16
+
+if !no_simd {
+    Defines WITH_SIMD
+    
+    IncludedSourceFiles $(SimdDir)/jsimd.c
+
+    AssemblerFlags -Isimd/nasm -I$SimdDir
+    if windows AssemblerFlags -DWIN64 -DWIN32 -D__x86_64__ -f win64
+
+    if x64      SimdDir simd/x86_64
+    if i386     SimdDir simd/i386
+    if mips     SimdDir simd/mips
+    if mips64   SimdDir simd/mips64
+    if powerpc  SimdDir simd/powerpc
+
+    IncludedSourceFiles [
+        $(SimdDir)/jsimdcpu.asm $(SimdDir)/jfdctflt-sse.asm
+        $(SimdDir)/jccolor-sse2.asm $(SimdDir)/jcgray-sse2.asm $(SimdDir)/jchuff-sse2.asm
+        $(SimdDir)/jcphuff-sse2.asm $(SimdDir)/jcsample-sse2.asm $(SimdDir)/jdcolor-sse2.asm
+        $(SimdDir)/jdmerge-sse2.asm $(SimdDir)/jdsample-sse2.asm $(SimdDir)/jfdctfst-sse2.asm
+        $(SimdDir)/jfdctint-sse2.asm $(SimdDir)/jidctflt-sse2.asm $(SimdDir)/jidctfst-sse2.asm
+        $(SimdDir)/jidctint-sse2.asm $(SimdDir)/jidctred-sse2.asm $(SimdDir)/jquantf-sse2.asm
+        $(SimdDir)/jquanti-sse2.asm
+        $(SimdDir)/jccolor-avx2.asm $(SimdDir)/jcgray-avx2.asm $(SimdDir)/jcsample-avx2.asm
+        $(SimdDir)/jdcolor-avx2.asm $(SimdDir)/jdmerge-avx2.asm $(SimdDir)/jdsample-avx2.asm
+        $(SimdDir)/jfdctint-avx2.asm $(SimdDir)/jidctint-avx2.asm $(SimdDir)/jquanti-avx2.asm
+    ]
+}
+
+if no_simd {
+    Defines USE_CLZ_INTRINSIC
+}
 
 if bits_in_jsample         bits_jsample %bits_in_jsample
 
@@ -71,49 +111,33 @@ Includes                  . gen
 Defines                   JPEG_LIB_VERSION=$jpeg_version PACKAGE_NAME=\"libjpeg-turbo\" BUILD=\"%(_timestamp)\" VERSION=\"$(Version)\"
 Defines                   NDEBUG INLINE=inline BITS_IN_JSAMPLE=$(bits_jsample)
 
-if bits_jsample == 8      Defines WITH_SIMD=%!no_simd C_ARITH_CODING_SUPPORTED=%!no_arith_encode D_ARITH_CODING_SUPPORTED=%!no_arith_decode
+if bits_jsample == 8      Defines C_ARITH_CODING_SUPPORTED=%!no_arith_encode D_ARITH_CODING_SUPPORTED=%!no_arith_decode
 
 if _bit == 32             Defines SIZEOF_SIZE_T=4
 if _bit == 64             Defines SIZEOF_SIZE_T=8
 
-if compiler != cl         Defines "HIDDEN=__attribute__((visibility(\"hidden\")))"
-
-if compiler == cl         Defines FORCE_INLINE=__forceinline THREAD_LOCAL=__declspec(thread) HAVE_INTRIN_H=1 
-if compiler != cl         Defines "FORCE_INLINE=__attribute__((always_inline))" THREAD_LOCAL=__thread
+if compiler != cl         Defines HIDDEN=__attribute__((visibility(\"hidden\")))
+if compiler != cl         Defines FORCE_INLINE=__attribute__((always_inline)) THREAD_LOCAL=__thread
+if compiler == cl         Defines FORCE_INLINE=__forceinline THREAD_LOCAL=__declspec(thread) HAVE_INTRIN_H=1
 
 if jpeg_version == 62     Defines JPEG_LIB_VERSION_DECIMAL=6.2 DEFAULT_SO_MAJOR_VERSION=$jpeg_version DEFAULT_SO_MINOR_VERSION=0
 if jpeg_version == 80     Defines JPEG_LIB_VERSION_DECIMAL=8.0 DEFAULT_SO_MAJOR_VERSION=8 DEFAULT_SO_MINOR_VERSION=2
 if jpeg_version == 70     Defines JPEG_LIB_VERSION_DECIMAL=7.0 2DEFAULT_SO_MAJOR_VERSION=7 DEFAULT_SO_MINOR_VERSION=0
 
-if target == turbojpeg|turbojpeg12|turbojpeg16 Defines BMP_SUPPORTED PPM_SUPPORTED
+if target starts_with turbojpeg Defines BMP_SUPPORTED PPM_SUPPORTED
 
-#if target starts_with turbojpeg Defines BMP_SUPPORTED PPM_SUPPORTED
+PreBuild.NewDirectory gen
+PreBuild.Copy jconfig.txt         gen/jconfig.h
+PreBuild.Copy jversion.h.in       gen/jversion.h
+PreBuild.Copy jconfigint.h.in.new gen/jconfigint.h
 
-
-#PreBuild.NewDir           gen
-#PreBuild.Copy!            jconfig.txt         gen/jconfig.h
-#PreBuild.Copy!            jconfigint.h.in.new gen/jconfigint.h
-#PreBuild.Copy!            jversion.h.in       gen/jversion.h
-
-if _platform != windows   PreBuild.Cmd mkdir -p gen
-if _platform == windows   PreBuild.Cmd mkdir gen
-
-if _platform != windows   PreBuild.Cmd cp   jconfig.txt         gen/jconfig.h
-if _platform != windows   PreBuild.Cmd cp   jversion.h.in       gen/jversion.h
-if _platform != windows   PreBuild.Cmd cp   jconfigint.h.in.new gen/jconfigint.h
-if _platform == windows   PreBuild.Cmd copy jconfig.txt         gen\jconfig.h
-if _platform == windows   PreBuild.Cmd copy jversion.h.in       gen\jversion.h
-if _platform == windows   PreBuild.Cmd copy jconfigint.h.in.new gen\jconfigint.h
-
-##
-help.message {
-
+.help {
  OPTIONS
    - jpeg8
-     Emulate libjpeg v8 API/ABI (this makes ${CMAKE_PROJECT_NAME} backward-incompatible with libjpeg v6b)
+     Emulate libjpeg v8 API/ABI
      
    - jpeg7
-     Emulate libjpeg v7 API/ABI (this makes ${CMAKE_PROJECT_NAME} backward-incompatible with libjpeg v6b)
+     Emulate libjpeg v7 API/ABI
 
    - bits_in_jsample=VALUE (Default value is 8)
       Specify "bits_in_jsample" as either
@@ -131,4 +155,3 @@ help.message {
    - no_arith_decode
       Disable arithmetic decoding 
 }
-##
