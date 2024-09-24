@@ -96,12 +96,12 @@ if no_simd {
 
 if bits_in_jsample         bits_jsample %bits_in_jsample
 
-"Emulating libjpeg API/ABI v% (WITH_JPEG7 = %, WITH_JPEG8 = %)" $jpeg_version %jpeg7 %jpeg8
-
 jpeg_version              62
 jpeg_version_decimal      6.2
 if jpeg8                  jpeg_version` 80 ; jpeg_version_decimal` 8.0
 if jpeg7                  jpeg_version` 70 ; jpeg_version_decimal` 7.0
+
+"Emulating libjpeg API/ABI v% (WITH_JPEG7 = %, WITH_JPEG8 = %)" $jpeg_version %jpeg7 %jpeg8
 
 if release                CompilerFlags -O3
 
