@@ -6,7 +6,7 @@ Type     static_lib
 TitleName        libjpeg-turbo
 Description      libjpeg API DLL
 InternalName     jpeg$(jpeg_version)
-Version          3.1.3
+Version          3.2.1
 CompanyName      libjpeg-turbo
 Copyright        Copyright 1991-&date.year The libjpeg-turbo Project and many others
 
@@ -37,7 +37,7 @@ Program_Wrappers
 
 SourceFiles.Exclude $Program_Wrappers
 
-Ppm_Wrappers
+TurboJpeg_Wrappers
 [
     $WrapDir/rdppm-8.c
     $WrapDir/rdppm-12.c
@@ -45,6 +45,12 @@ Ppm_Wrappers
     $WrapDir/wrppm-8.c
     $WrapDir/wrppm-12.c
     $WrapDir/wrppm-16.c
+    $WrapDir/rdpng-8.c
+    $WrapDir/rdpng-12.c
+    $WrapDir/rdpng-16.c
+    $WrapDir/wrpng-8.c
+    $WrapDir/wrpng-12.c
+    $WrapDir/wrpng-16.c
 ]
 
 Jpeg_Sources
@@ -84,9 +90,24 @@ if !no_arith_decode Jpeg_Sources $SrcDir/jdarith.c
 if !no_arith_encode Jpeg_Sources $SrcDir/jaricom.c
 if no_arith_encode if !no_arith_decode Jpeg_Sources $SrcDir/jaricom.c
 
+Spng_Sources
+[
+    $SrcDir/spng/spng.c
+    $SrcDir/spng/zlib/adler32.c
+    $SrcDir/spng/zlib/compress.c
+    $SrcDir/spng/zlib/crc32.c
+    $SrcDir/spng/zlib/deflate.c
+    $SrcDir/spng/zlib/inffast.c
+    $SrcDir/spng/zlib/inflate.c
+    $SrcDir/spng/zlib/inftrees.c
+    $SrcDir/spng/zlib/trees.c
+    $SrcDir/spng/zlib/zutil.c
+]
+
 TurboJpeg_Sources
 [
     $Jpeg_Sources
+    $Spng_Sources
     $SrcDir/turbojpeg.c
     $SrcDir/transupp.c
     $SrcDir/jdatadst-tj.c
@@ -97,13 +118,13 @@ TurboJpeg_Sources
 
 if target == turbojpeg  SourceFiles $TurboJpeg_Sources
 if target != turbojpeg  SourceFiles $Jpeg_Sources
-if target != turbojpeg  SourceFiles.Exclude $Ppm_Wrappers
+if target != turbojpeg  SourceFiles.Exclude $TurboJpeg_Wrappers
 
 if simd
 {
     Compiler.Defines WITH_SIMD
 
-    SourceFiles $(SimdDir)/jsimd.c
+    SourceFiles simd/jsimd.c
 
     Assembler.Flags -Isimd/nasm -I$SimdDir
 
@@ -160,10 +181,14 @@ Compiler.Includes         . gen
 
 Compiler.Defines          NDEBUG
 
-if target starts_with turbojpeg Compiler.Defines BMP_SUPPORTED PPM_SUPPORTED
+if target starts_with turbojpeg
+{
+    Compiler.Defines  BMP_SUPPORTED PPM_SUPPORTED PNG_SUPPORTED SPNG_STATIC Z_PREFIX
+    Compiler.Includes $SrcDir/spng $SrcDir/spng/zlib
+}
 
 copyright_year                1991-&date.year
-libjpeg_turbo_version_number  3001003
+libjpeg_turbo_version_number  3002001
 
 if msvc
 {
@@ -198,6 +223,9 @@ if !no_arith_encode c_arith_line \#define C_ARITH_CODING_SUPPORTED 1
 if !no_arith_decode d_arith_line \#define D_ARITH_CODING_SUPPORTED 1
 
 if simd with_simd_line \#define WITH_SIMD 1
+
+if simd    simd_architecture X86_64 else simd_architecture NONE
+if profile profile_line \#define WITH_PROFILE
 
 PreBuild.NewDir gen
 
@@ -265,7 +293,9 @@ PreBuild.WriteFile gen/jconfigint.h
     $c_arith_line
     $d_arith_line
     $with_simd_line
+    \#define SIMD_ARCHITECTURE  $simd_architecture
     \#endif
+    $profile_line
 }
 
 PreBuild.WriteFile gen/jversion.h
@@ -278,24 +308,7 @@ PreBuild.WriteFile gen/jversion.h
     \#define JVERSION  "6b  27-Mar-1998"
     \#endif
 
-    \#define JCOPYRIGHT1 \\
-    "Copyright (C) 2009-2024 D. R. Commander\\n" \\
-    "Copyright (C) 2015, 2020 Google, Inc.\\n" \\
-    "Copyright (C) 2019-2020 Arm Limited\\n" \\
-    "Copyright (C) 2015-2016, 2018 Matthieu Darbois\\n" \\
-    "Copyright (C) 2011-2016 Siarhei Siamashka\\n" \\
-    "Copyright (C) 2015 Intel Corporation\\n"
-
-    \#define JCOPYRIGHT2 \\
-    "Copyright (C) 2013-2014 Linaro Limited\\n" \\
-    "Copyright (C) 2013-2014 MIPS Technologies, Inc.\\n" \\
-    "Copyright (C) 2009, 2012 Pierre Ossman for Cendio AB\\n" \\
-    "Copyright (C) 2009-2011 Nokia Corporation and/or its subsidiary(-ies)\\n" \\
-    "Copyright (C) 1999-2006 MIYASAKA Masaru\\n" \\
-    "Copyright (C) 1999 Ken Murchison\\n" \\
-    "Copyright (C) 1991-2020 Thomas G. Lane, Guido Vollbeding\\n"
-
-    \#define JCOPYRIGHT_SHORT \\
+    \#define JCOPYRIGHT \\
     "Copyright (C) $copyright_year The libjpeg-turbo Project and many others"
 }
 
@@ -308,6 +321,7 @@ option.jpeg7                 Emulate libjpeg v7 API/ABI
 option.simd(on off)          Enable or Disable SIMD acceleration
 option.no_arith_encode       Disable arithmetic encoding
 option.no_arith_decode       Disable arithmetic decoding
+option.profile               Enable low-level JPEG algorithm performance profiling
 
 # -- Help  --------------------------------------------------------
 .Help
